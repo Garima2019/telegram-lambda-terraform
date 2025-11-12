@@ -1,7 +1,38 @@
-# provider block (falls noch nicht vorhanden)
-provider "aws" {
-  region = var.aws_region != "" ? var.aws_region : "eu-central-1"
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.33.0"
+				}
+		}
 }
+
+provider "aws" {
+  region                      = var.aws_region
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  endpoints {
+    s3         = "http://localhost:4566"
+    iam        = "http://localhost:4566"
+    lambda     = "http://localhost:4566"
+    dynamodb   = "http://localhost:4566"
+    sts        = "http://localhost:4566"
+    cloudwatch = "http://localhost:4566"
+    logs       = "http://localhost:4566"
+  }
+
+  # 👇 This line forces S3 path-style URLs, fixing the “no such host” error
+  s3_use_path_style = true
+}
+
+# provider block (falls noch nicht vorhanden)
+#provider "aws" {
+ # region = var.aws_region != "" ? var.aws_region : "eu-central-1"
+#}
 
 # optional: zufälliger suffix, damit Name eindeutig wird
 resource "random_id" "suffix" {
@@ -55,6 +86,72 @@ resource "aws_iam_user_policy" "telegram_user_policy" {
 # create access key for the user (you will get the secret in Terraform output — treat it carefully)
 resource "aws_iam_access_key" "telegram_user_key" {
   user = aws_iam_user.telegram_user.name
+}
+
+# IAM Role for Lambda
+resource "aws_iam_role" "telegram_lambda_role" {
+  name = "telegram-bot-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Policy allowing Lambda to write logs to CloudWatch
+resource "aws_iam_policy" "telegram_lambda_logging" {
+  name        = "telegram-bot-lambda-logging"
+  description = "Allow Lambda to create and write to CloudWatch Logs"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Attach policy to Lambda role
+resource "aws_iam_role_policy_attachment" "telegram_lambda_logging_attach" {
+  role       = aws_iam_role.telegram_lambda_role.name
+  policy_arn = aws_iam_policy.telegram_lambda_logging.arn
+}
+
+
+resource "aws_lambda_function" "telegram_bot" {
+  function_name = "telegram-bot"
+  role          = aws_iam_role.telegram_lambda_role.arn
+  handler       = "handler.lambda_handler"
+  runtime       = "python3.11"
+  filename      = "./lambda_function.zip"
+  timeout 		= 15
+  environment {
+    variables = {
+      TELEGRAM_BOT_TOKEN = var.telegram_bot_token
+      S3_BUCKET          = aws_s3_bucket.telegram_state.bucket
+			}
+		}
+
+  depends_on = [
+    aws_iam_role.telegram_lambda_role,
+    aws_iam_role_policy_attachment.telegram_lambda_logging_attach
+		]
 }
 
 # outputs
