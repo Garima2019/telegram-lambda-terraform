@@ -6,7 +6,7 @@ from botocore.config import Config
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8551321920:AAEjtSaf4L_nn-MqJe3EcO3IHoPFtDyrG5E")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 S3_BUCKET = os.environ.get("S3_BUCKET", "")
 OFFSET_KEY = os.environ.get("OFFSET_KEY", "state/offset.txt")
 LOG_KEY = os.environ.get("LOG_KEY", "logs/chat-log.jsonl")
